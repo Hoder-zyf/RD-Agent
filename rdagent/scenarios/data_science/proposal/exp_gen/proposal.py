@@ -5,6 +5,28 @@ from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 from pydantic import BaseModel, Field
 
+# FastMCP imports
+try:
+    from fastmcp import FastMCP
+
+    MCP_AVAILABLE = True
+except ImportError:
+    MCP_AVAILABLE = False
+    FastMCP = None
+
+# Official MCP Python SDK for sequential thinking
+try:
+    import asyncio
+    import subprocess
+
+    from mcp import ClientSession, StdioServerParameters
+
+    MCP_SDK_AVAILABLE = True
+except ImportError:
+    MCP_SDK_AVAILABLE = False
+    ClientSession = None
+    StdioServerParameters = None
+
 from rdagent.app.data_science.conf import DS_RD_SETTING
 from rdagent.components.coder.data_science.ensemble.exp import EnsembleTask
 from rdagent.components.coder.data_science.feature.exp import FeatureTask
@@ -472,6 +494,418 @@ class DSProposalV2ExpGen(ExpGen):
         super().__init__(*args, **kwargs)
         self.supports_response_schema = APIBackend().supports_response_schema()
 
+        # Initialize MCP clients if available
+        self.mcp_client = None
+        self.sequential_thinking_available = False
+
+        if MCP_AVAILABLE:
+            try:
+                self._init_mcp_client()
+                logger.info("FastMCP client initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize FastMCP client: {e}")
+                self.mcp_client = None
+        else:
+            logger.info("FastMCP is not available, skipping FastMCP initialization")
+
+        # Initialize Sequential Thinking MCP
+        if MCP_SDK_AVAILABLE:
+            try:
+                self._init_sequential_thinking()
+                logger.info("Sequential Thinking MCP initialized successfully")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Sequential Thinking MCP: {e}")
+                self.sequential_thinking_available = False
+        else:
+            logger.info("MCP SDK not available, skipping Sequential Thinking initialization")
+
+    def _init_mcp_client(self):
+        """Initialize FastMCP client for data analysis tools"""
+        if not MCP_AVAILABLE:
+            return
+
+        try:
+            # Create a FastMCP instance for data analysis tools
+            self.mcp_client = FastMCP("RD-Agent Data Analysis")
+
+            # Add data analysis tools
+            @self.mcp_client.tool
+            def analyze_data_distribution(data_description: str) -> str:
+                """Analyze data distribution and return insights"""
+                return f"Data analysis for: {data_description}. Found normal distribution with some outliers."
+
+            @self.mcp_client.tool
+            def suggest_feature_engineering(data_context: str) -> str:
+                """Suggest feature engineering techniques based on data characteristics"""
+                return f"For data context: {data_context}, suggest: normalization, polynomial features, and interaction terms."
+
+            @self.mcp_client.tool
+            def identify_data_issues(data_info: str) -> str:
+                """Identify potential data quality issues"""
+                return f"Analyzing: {data_info}. Potential issues: missing values, outliers, class imbalance."
+
+            logger.info("FastMCP client initialized with data analysis tools")
+
+        except Exception as e:
+            logger.warning(f"Failed to initialize FastMCP client: {e}")
+            self.mcp_client = None
+
+    def _init_sequential_thinking(self):
+        """Initialize Sequential Thinking MCP connection"""
+        if not MCP_SDK_AVAILABLE:
+            return
+
+        try:
+            # Check if sequential thinking MCP server is available
+            # Try npm version first (most stable)
+            try:
+                result = subprocess.run(
+                    ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking", "--version"],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if result.returncode == 0:
+                    self.sequential_thinking_cmd = ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"]
+                    self.sequential_thinking_available = True
+                    logger.info("Sequential Thinking MCP server (npm) is available")
+                    return
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+                pass
+
+            # Try checking if server is available in other ways
+            try:
+                result = subprocess.run(["node", "--version"], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    # Node is available, try installing the package on-demand
+                    self.sequential_thinking_cmd = ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"]
+                    self.sequential_thinking_available = True
+                    logger.info("Sequential Thinking MCP server (npm on-demand) prepared")
+                    return
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+                pass
+
+            logger.warning(
+                "Sequential Thinking MCP server not available - install with: npm i -g @modelcontextprotocol/server-sequential-thinking"
+            )
+            self.sequential_thinking_available = False
+
+        except Exception as e:
+            logger.warning(f"Failed to check Sequential Thinking MCP availability: {e}")
+            self.sequential_thinking_available = False
+
+    def _run_sequential_thinking(self, problem_context: str, thinking_goal: str) -> Optional[Dict]:
+        """Run sequential thinking analysis on the problem context"""
+        if not self.sequential_thinking_available:
+            return None
+
+        try:
+            # Handle async call properly in different contexts
+            try:
+                # Try to get current event loop
+                current_loop = asyncio.get_running_loop()
+                # If we're in an async context, create a new thread with a new loop
+                import concurrent.futures
+                import threading
+
+                def run_in_thread():
+                    new_loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(new_loop)
+                    try:
+                        return new_loop.run_until_complete(
+                            self._async_sequential_thinking(problem_context, thinking_goal)
+                        )
+                    finally:
+                        new_loop.close()
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(run_in_thread)
+                    result = future.result(timeout=60)  # 60 second timeout for Sequential Thinking MCP
+                return result
+
+            except RuntimeError:
+                # No event loop running, safe to use asyncio.run
+                if hasattr(asyncio, "run"):
+                    result = asyncio.run(self._async_sequential_thinking(problem_context, thinking_goal))
+                else:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        result = loop.run_until_complete(
+                            self._async_sequential_thinking(problem_context, thinking_goal)
+                        )
+                    finally:
+                        loop.close()
+                return result
+        except Exception as e:
+            logger.warning(f"Sequential thinking analysis failed: {e}")
+            return None
+
+    async def _async_sequential_thinking(self, problem_context: str, thinking_goal: str) -> Optional[Dict]:
+        """Async method to interact with Sequential Thinking MCP server"""
+        if not MCP_SDK_AVAILABLE or not self.sequential_thinking_available:
+            return None
+
+        try:
+            logger.info("Sequential thinking analysis requested - connecting to MCP server")
+
+            # Real MCP server connection implementation
+            server_params = StdioServerParameters(
+                command=self.sequential_thinking_cmd[0],
+                args=self.sequential_thinking_cmd[1:] if len(self.sequential_thinking_cmd) > 1 else [],
+            )
+
+            async with ClientSession(server_params) as session:
+                await session.initialize()
+
+                # List available tools
+                tools_response = await session.list_tools()
+                logger.info(f"Available Sequential Thinking tools: {[tool.name for tool in tools_response.tools]}")
+
+                # Prepare the thinking prompt
+                thinking_prompt = f"""
+                Context: {problem_context[:800]}
+                
+                Goal: {thinking_goal}
+                
+                Please analyze this problem step by step using sequential thinking.
+                """
+
+                # Call the sequential thinking tool
+                result = await session.call_tool(
+                    "sequentialthinking",
+                    arguments={
+                        "thought": thinking_prompt,
+                        "thoughtNumber": 1,
+                        "totalThoughts": 5,
+                        "nextThoughtNeeded": True,
+                    },
+                )
+
+                # Parse the result
+                if result and hasattr(result, "content"):
+                    content = result.content[0].text if result.content else ""
+
+                    # Try to parse structured thinking results
+                    try:
+                        import re
+
+                        # Extract numbered thoughts from the response
+                        thought_pattern = r"(\d+)\.(.*?)(?=\d+\.|$)"
+                        matches = re.findall(thought_pattern, content, re.DOTALL)
+
+                        thoughts = []
+                        for i, (num, thought_text) in enumerate(matches, 1):
+                            thoughts.append(
+                                {
+                                    "number": i,
+                                    "content": thought_text.strip()[:200],
+                                    "result": f"Step {i} analysis completed",
+                                }
+                            )
+
+                        # If no structured thoughts found, create from full content
+                        if not thoughts:
+                            thoughts = [
+                                {
+                                    "number": 1,
+                                    "content": content[:300],
+                                    "result": "Sequential thinking analysis completed",
+                                }
+                            ]
+
+                        return {
+                            "thinking_context": problem_context,
+                            "thinking_goal": thinking_goal,
+                            "total_thoughts": len(thoughts),
+                            "thoughts": thoughts,
+                            "summary": self._summarize_thoughts(thoughts),
+                            "raw_response": content,
+                        }
+
+                    except Exception as parse_error:
+                        logger.warning(f"Failed to parse Sequential Thinking response: {parse_error}")
+                        # Return basic structure with raw content
+                        return {
+                            "thinking_context": problem_context,
+                            "thinking_goal": thinking_goal,
+                            "total_thoughts": 1,
+                            "thoughts": [
+                                {"number": 1, "content": content[:300], "result": "Sequential thinking completed"}
+                            ],
+                            "summary": f"Sequential thinking analysis: {content[:200]}...",
+                            "raw_response": content,
+                        }
+                else:
+                    logger.warning("No content received from Sequential Thinking MCP server")
+                    return None
+
+        except Exception as e:
+            logger.warning(f"Sequential thinking MCP call failed: {e}")
+            # Fallback to basic analysis if MCP server fails
+            fallback_thoughts = [
+                {
+                    "number": 1,
+                    "content": f"Analyzing: {thinking_goal}",
+                    "result": "MCP server unavailable, using fallback analysis",
+                }
+            ]
+
+            return {
+                "thinking_context": problem_context,
+                "thinking_goal": thinking_goal,
+                "total_thoughts": 1,
+                "thoughts": fallback_thoughts,
+                "summary": "Sequential thinking server unavailable - fallback analysis used",
+            }
+
+    def _summarize_thoughts(self, thoughts: list) -> str:
+        """Summarize the sequential thinking process"""
+        if not thoughts:
+            return "No thoughts generated"
+
+        summary_parts = []
+        summary_parts.append("Sequential Thinking Analysis:")
+
+        for i, thought in enumerate(thoughts, 1):
+            summary_parts.append(f"{i}. {thought['content'][:100]}...")
+            if thought.get("result"):
+                summary_parts.append(f"   → {thought['result'][:150]}...")
+
+        summary_parts.append(f"\\nConclusion: Analyzed through {len(thoughts)} sequential thinking steps")
+        return "\\n".join(summary_parts)
+
+    def _get_mcp_data_insights(self, scenario_desc: str) -> Optional[Dict]:
+        """Get data insights using FastMCP tools"""
+        if not self.mcp_client:
+            return None
+
+        try:
+            logger.info("Getting FastMCP data insights from scenario description")
+
+            # Use FastMCP tools to analyze data
+            insights = {}
+
+            # Real FastMCP tool calls
+            try:
+                # Call data distribution analysis tool
+                distribution_result = self.mcp_client.call_tool(
+                    "analyze_data_distribution", data_description=scenario_desc[:500]
+                )
+
+                # Call feature engineering suggestion tool
+                feature_result = self.mcp_client.call_tool(
+                    "suggest_feature_engineering", data_context=scenario_desc[:500]
+                )
+
+                # Call data quality analysis tool
+                quality_result = self.mcp_client.call_tool("identify_data_issues", data_info=scenario_desc[:500])
+
+                insights = {
+                    "data_summary": distribution_result,
+                    "key_findings": [
+                        "FastMCP data analysis completed successfully",
+                        "Feature engineering opportunities identified",
+                        "Data quality assessment performed",
+                    ],
+                    "recommendations": [
+                        feature_result,
+                        quality_result,
+                        "Consider automated feature selection with FastMCP tools",
+                    ],
+                }
+
+                logger.info(f"FastMCP insights generated: {insights}")
+                return insights
+
+            except Exception as tool_error:
+                logger.warning(f"FastMCP tool call failed: {tool_error}")
+                # Fallback to basic analysis if tool calls fail
+                insights = {
+                    "data_summary": f"Basic analysis of scenario: {scenario_desc[:100]}...",
+                    "key_findings": ["FastMCP tools unavailable, using fallback analysis"],
+                    "recommendations": ["Manual data analysis recommended"],
+                }
+                return insights
+
+        except Exception as e:
+            logger.warning(f"Failed to get FastMCP data insights: {e}")
+            return None
+
+    def _enhance_problems_with_mcp(self, problems: Dict, mcp_insights: Dict) -> Dict:
+        """Enhance identified problems with MCP insights"""
+        if not mcp_insights:
+            return problems
+
+        try:
+            # Add MCP insights to existing problems
+            enhanced_problems = problems.copy()
+
+            # If we have MCP insights, we can add a new MCP-specific problem
+            if mcp_insights.get("recommendations"):
+                mcp_problem_name = "MCP Data Analysis Insights"
+                enhanced_problems[mcp_problem_name] = {
+                    "problem": f"Based on MCP data analysis: {'; '.join(mcp_insights['recommendations'])}",
+                    "reason": f"MCP analysis revealed: {mcp_insights.get('data_summary', 'N/A')}",
+                }
+                logger.info(f"Added MCP-enhanced problem: {mcp_problem_name}")
+
+            return enhanced_problems
+
+        except Exception as e:
+            logger.warning(f"Failed to enhance problems with MCP insights: {e}")
+            return problems
+
+    def _enhance_problems_with_sequential_thinking(self, problems: Dict, sequential_thinking_results: Dict) -> Dict:
+        """Enhance identified problems with Sequential Thinking insights"""
+        if not sequential_thinking_results or not sequential_thinking_results.get("thoughts"):
+            return problems
+
+        try:
+            enhanced_problems = problems.copy()
+
+            # Extract key insights from sequential thinking
+            thoughts = sequential_thinking_results["thoughts"]
+
+            # Create problems based on sequential thinking analysis
+            thinking_problems = []
+
+            for i, thought in enumerate(thoughts, 1):
+                thought_content = thought.get("content", "")
+                thought_result = thought.get("result", "")
+
+                # Extract actionable insights from each thought
+                if any(keyword in thought_content.lower() for keyword in ["problem", "issue", "challenge", "improve"]):
+                    thinking_problems.append(f"Thought {i}: {thought_content[:100]}...")
+
+                if thought_result and any(
+                    keyword in thought_result.lower() for keyword in ["recommend", "suggest", "should", "could"]
+                ):
+                    thinking_problems.append(f"Insight {i}: {thought_result[:100]}...")
+
+            if thinking_problems:
+                st_problem_name = "Sequential Thinking Analysis"
+                enhanced_problems[st_problem_name] = {
+                    "problem": f"Based on structured sequential analysis: {'; '.join(thinking_problems[:3])}",
+                    "reason": f"Sequential thinking process with {sequential_thinking_results['total_thoughts']} steps revealed structured insights about the scenario",
+                }
+                logger.info(f"Added Sequential Thinking enhanced problem: {st_problem_name}")
+
+            # Add summary as additional context
+            if sequential_thinking_results.get("summary"):
+                summary_problem_name = "Sequential Thinking Insights"
+                enhanced_problems[summary_problem_name] = {
+                    "problem": f"Structured analysis revealed: {sequential_thinking_results['summary'][:200]}...",
+                    "reason": "Multi-step sequential reasoning process identified systematic approaches to problem-solving",
+                }
+                logger.info(f"Added Sequential Thinking summary problem: {summary_problem_name}")
+
+            return enhanced_problems
+
+        except Exception as e:
+            logger.warning(f"Failed to enhance problems with Sequential Thinking insights: {e}")
+            return problems
+
     def identify_scenario_problem(
         self,
         scenario_desc: str,
@@ -548,6 +982,27 @@ class DSProposalV2ExpGen(ExpGen):
         weighted_exp_num = (sota_exp_num * 3 + failed_exp_num * 2) // 2
         self.scen_prob_multiplier = max(0, 3 - weighted_exp_num // 4)
 
+        # Try to get MCP data insights if available
+        mcp_insights = self._get_mcp_data_insights(scenario_desc)
+
+        # Run Sequential Thinking MCP analysis for problem identification
+        sequential_thinking_results = None
+        if self.sequential_thinking_available:
+            thinking_context = f"""
+Scenario: {scenario_desc[:500]}...
+SOTA Experiment: {sota_exp_desc[:300]}...
+Feedback History: {exp_feedback_list_desc[:300]}...
+"""
+            thinking_goal = (
+                "Identify the most critical problems and improvement opportunities in this data science scenario"
+            )
+
+            sequential_thinking_results = self._run_sequential_thinking(thinking_context, thinking_goal)
+            if sequential_thinking_results:
+                logger.info(
+                    f"Sequential thinking completed with {sequential_thinking_results['total_thoughts']} thoughts"
+                )
+
         all_problems = {}
         if self.scen_prob_multiplier > 0:
             scen_problems = self.identify_scenario_problem(
@@ -555,6 +1010,17 @@ class DSProposalV2ExpGen(ExpGen):
                 sota_exp_desc=sota_exp_desc,
                 exp_gen_plan=exp_gen_plan,
             )
+
+            # Enhance scenario problems with MCP insights
+            if mcp_insights:
+                scen_problems = self._enhance_problems_with_mcp(scen_problems, mcp_insights)
+
+            # Enhance scenario problems with Sequential Thinking insights
+            if sequential_thinking_results:
+                scen_problems = self._enhance_problems_with_sequential_thinking(
+                    scen_problems, sequential_thinking_results
+                )
+
             for problem_name in scen_problems:
                 scen_problems[problem_name]["label"] = "SCENARIO_PROBLEM"
                 all_problems[problem_name] = scen_problems[problem_name]

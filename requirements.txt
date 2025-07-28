@@ -10,6 +10,12 @@ fuzzywuzzy
 openai
 litellm>=1.73  # to support `from litellm import get_valid_models`
 azure.identity
+
+# FastMCP (Model Context Protocol) integration
+fastmcp
+
+# Official MCP SDK for Sequential Thinking
+mcp
 pyarrow
 rich
 tqdm
