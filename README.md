@@ -31,6 +31,7 @@
 # 📰 News
 | 🗞️ News        | 📝 Description                 |
 | --            | ------      |
+| ICML 2026 Acceptance | We are thrilled to announce that our paper [FT-Dojo: Towards Autonomous LLM Fine-Tuning with Language Agents](https://arxiv.org/abs/2603.01712) has been accepted to ICML 2026. |
 | ACL 2026 Findings Acceptance | We are thrilled to announce that our paper [Reasoning as Gradient](https://arxiv.org/abs/2603.01692) has been accepted to ACL 2026 Findings. Execution traces are available at [Gome GPT-5 Traces](https://huggingface.co/datasets/amstrongzyf/Gome-GPT5-Traces) |
 | Web UI Release | We release a new frontend that can be built and served by `rdagent server_ui` for real-time interaction and trace viewing, currently excluding the `data_science` scenario. |
 | NeurIPS 2025 Acceptance | We are thrilled to announce that our paper [R&D-Agent-Quant](https://arxiv.org/abs/2505.15155) has been accepted to NeurIPS 2025 | 
@@ -500,7 +501,7 @@ For more detail, please refer to our **[🖥️ Live Demo page](https://rdagent.
 
 ## Deep Application in Diverse Scenarios
 
-- [R&D-Agent-Quant: A Multi-Agent Framework for Data-Centric Factors and Model Joint Optimization](https://arxiv.org/abs/2505.15155)
+- **[Quant]** [R&D-Agent-Quant: A Multi-Agent Framework for Data-Centric Factors and Model Joint Optimization](https://arxiv.org/abs/2505.15155)
 ```BibTeX
 @misc{li2025rdagentquantmultiagentframeworkdatacentric,
       title={R&D-Agent-Quant: A Multi-Agent Framework for Data-Centric Factors and Model Joint Optimization}, 
@@ -514,7 +515,7 @@ For more detail, please refer to our **[🖥️ Live Demo page](https://rdagent.
 ```
 ![image](https://github.com/user-attachments/assets/3186f67a-c2f8-4b6b-8bb9-a9b959c13866)
 
-- [Reasoning as Gradient: Scaling MLE Agents Beyond Tree Search](https://arxiv.org/abs/2603.01692)
+- **[MLE]** [Reasoning as Gradient: Scaling MLE Agents Beyond Tree Search](https://arxiv.org/abs/2603.01692)
 
 ```BibTeX
 @article{zhang2026reasoning,
@@ -526,6 +527,17 @@ For more detail, please refer to our **[🖥️ Live Demo page](https://rdagent.
 ```
 
 You can check the detailed execution traces online at [Gome GPT-5 Traces](https://huggingface.co/datasets/amstrongzyf/Gome-GPT5-Traces).
+
+- **[SFT]** [FT-Dojo: Towards Autonomous LLM Fine-Tuning with Language Agents](https://arxiv.org/abs/2603.01712)
+
+```BibTeX
+@article{li2026ft,
+  title={FT-Dojo: Towards Autonomous LLM Fine-Tuning with Language Agents},
+  author={Li, Qizheng and Zhang, Yifei and Yang, Xiao and Yang, Xu and Wang, Zhuo and Liu, Weiqing and Bian, Jiang},
+  journal={arXiv preprint arXiv:2603.01712},
+  year={2026}
+}
+```
 
 # 🤝 Contributing
 
